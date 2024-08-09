@@ -187,8 +187,8 @@ plt.colorbar(label='Ratio de Sharpe')
 # Marcar el portafolio de mínima varianza
 plt.scatter(vol_min, ret_min, color='blue', marker='*', s=200, label='P. Mínima Varianza')
 
-# Marcar el portafolio de máximo retorno
-plt.scatter(vol_max, ret_max, color='black', marker='*', s=200, label='P. Máximo Retorno')
+# # Marcar el portafolio de máximo retorno
+# plt.scatter(vol_max, ret_max, color='black', marker='*', s=200, label='P. Máximo Retorno')
 
 # Marcar el portafolio mixto
 plt.scatter(vol_mix, ret_mix, color='lime', marker='*', s=200, label='P. Multicriterio')
