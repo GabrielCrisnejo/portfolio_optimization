@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import os
 import scipy.optimize as op
+import matplotlib.pyplot as plt
 
 def load_timeseries(ticker, directory='~/portfolio_optimization/data/'):
     
@@ -73,6 +74,9 @@ var_return = df_tick.drop(columns=['date']).var().values *252.0
 # Target anual return
 target_return = 0.3  
 
+# Adversion al riesgo (modelo mixto)
+gamma = 7.
+
 # Funciones objetivo
 def portfolio_variance(x, cov):
     return x.T @ cov @ x
@@ -80,6 +84,8 @@ def portfolio_variance(x, cov):
 def portfolio_return(x, mean_return):
     return -x.T @ mean_return
 
+def portfolio_mix(x, cov, mean_return, gamma):
+    return gamma * x.T @ cov @ x -x.T @ mean_return
 
 # Inicialización y restricciones comunes
 x0 = np.full(len(tickers), 1 / np.sqrt(len(tickers)))
@@ -102,28 +108,93 @@ def optimize_portfolio_max(cov, mean_return, target_dispersion):
     result = op.minimize(portfolio_return, x0, args=(mean_return,), constraints=constraints, bounds=positive_weights)
     return result.x, -result.fun
 
+# Optimización del modelo mixto
+def optimize_portfolio_mixto(cov, mean_return, gamma):
+    #dispersion_constraint = [{"type": "eq", "fun": lambda x: x.T @ cov @ x - target_dispersion}]
+    constraints = l1_norm #+ dispersion_constraint
+
+    result = op.minimize(portfolio_mix, x0, args=(cov, mean_return, gamma,), constraints=constraints, bounds=positive_weights)
+    return result.x, -result.fun
+
 # Ejecutamos la optimización de varianza mínima
 optimize_vector_min, disp_obtained = optimize_portfolio_min(cov, mean_return, target_return)
 
-# Crear DataFrame para varianza mínima
+# Creamos DataFrame para varianza mínima
 df_weights_min = pd.DataFrame({
     'tickers': tickers,
     'optimize_vector': optimize_vector_min
 })
 
 # Ejecutamos la optimización de retorno máximo
-target_dispersion = disp_obtained
+target_dispersion = 0.22**2 #disp_obtained
 optimize_vector_max, return_obtained = optimize_portfolio_max(cov, mean_return, target_dispersion)
 
-# Crear DataFrame para retorno máximo
+# Creamos DataFrame para retorno máximo
 df_weights_max = pd.DataFrame({
     'tickers': tickers,
     'optimize_vector': optimize_vector_max
 })
 
+# Ejecutamos la optimización de retorno máximo
+target_dispersion = disp_obtained
+optimize_vector_mixto, mix_obtained = optimize_portfolio_mixto(cov, mean_return, gamma)
 
+# Creamos DataFrame para modelo mixto
+df_weights_mixto = pd.DataFrame({
+    'tickers': tickers,
+    'optimize_vector': optimize_vector_mixto
+})
 
+# --------------- Frontera Eficiente -------------------
 
+def portfolio_performance(weights, mean_return, cov):
+    ret = np.dot(weights, mean_return)
+    vol = np.sqrt(np.dot(weights.T, np.dot(cov, weights)))
+    return ret, vol
+
+def efficient_frontier(mean_return, cov, num_portfolios=100000):
+    results = np.zeros((3, num_portfolios))
+    weights_record = []
+
+    for i in range(num_portfolios):
+        weights = np.random.random(len(mean_return))
+        weights /= np.sum(weights)
+
+        ret, vol = portfolio_performance(weights, mean_return, cov)
+
+        results[0,i] = vol
+        results[1,i] = ret
+        results[2,i] = ret / vol  # Ratio de Sharpe
+
+        weights_record.append(weights)
+
+    return results, weights_record
+
+results, weights_record = efficient_frontier(mean_return, cov)
+
+# Calcular rendimientos y volatilidades de los portafolios optimizados
+ret_min, vol_min = portfolio_performance(optimize_vector_min, mean_return, cov)
+ret_max, vol_max = portfolio_performance(optimize_vector_max, mean_return, cov)
+ret_mix, vol_mix = portfolio_performance(optimize_vector_mixto, mean_return, cov)
+
+plt.figure(figsize=(10, 7))
+plt.scatter(results[0,:], results[1,:], c=results[2,:], cmap='cool', marker='o')
+plt.title('Frontera Eficiente')
+plt.xlabel('Volatilidad')
+plt.ylabel('Retorno')
+plt.colorbar(label='Ratio de Sharpe')
+
+# Marcar el portafolio de mínima varianza
+plt.scatter(vol_min, ret_min, color='blue', marker='*', s=200, label='P. Mínima Varianza')
+
+# Marcar el portafolio de máximo retorno
+plt.scatter(vol_max, ret_max, color='black', marker='*', s=200, label='P. Máximo Retorno')
+
+# Marcar el portafolio mixto
+plt.scatter(vol_mix, ret_mix, color='lime', marker='*', s=200, label='P. Multicriterio')
+
+plt.grid()
+plt.legend(loc='best')
 
 
 
